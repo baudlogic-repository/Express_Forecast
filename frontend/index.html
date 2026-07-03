@@ -60,6 +60,9 @@
                     <canvas id="accuracyChart"></canvas>
                 </div>
                 <div style="margin-bottom: 10px; position: sticky; top: 0; z-index: 10; background: var(--glass-bg); padding: 10px 0; border-bottom: 1px solid var(--glass-border);">
+                    <div style="margin-bottom: 8px;">
+                        <span id="accuracy-count" style="font-weight: bold; color: #b71234;">Showing 0 items</span>
+                    </div>
                     <input type="text" id="accuracy-search" placeholder="Search Part Number..." style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid #ccc; outline: none;">
                 </div>
                 <div class="table-container" style="overflow-x: hidden;">
@@ -90,6 +93,9 @@
                 <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid #fca5a5; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                     <h3 style="margin: 0 0 10px 0; color: #b91c1c;">Excess Inventory Radar</h3>
                     <p style="margin: 0; font-size: 0.9rem; color: #7f1d1d;">These parts have an On-Hand quantity that exceeds the AI's projected demand for the entire next 12 months. This represents locked capital that could potentially be recovered.</p>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <span id="deadstock-count" style="font-weight: bold; color: #b71234;">Showing 0 items</span>
                 </div>
                 <div class="table-container">
                     <table id="table-deadstock"><thead></thead><tbody></tbody></table>

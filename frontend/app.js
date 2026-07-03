@@ -31,6 +31,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper to render table
     function renderTable(tableId, dataArray) {
+        if (tableId === 'table-accuracy') {
+            const countEl = document.getElementById('accuracy-count');
+            if(countEl) countEl.textContent = `Showing ${dataArray ? dataArray.length : 0} items`;
+        }
+        if (tableId === 'table-deadstock') {
+            const countEl = document.getElementById('deadstock-count');
+            if(countEl) countEl.textContent = `Showing ${dataArray ? dataArray.length : 0} items`;
+        }
+
         const table = document.getElementById(tableId);
         const thead = table.querySelector('thead');
         const tbody = table.querySelector('tbody');
