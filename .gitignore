@@ -26,3 +26,6 @@ Desktop.ini
 
 # Logs
 *.log
+
+# Custom
+App Info.txt
