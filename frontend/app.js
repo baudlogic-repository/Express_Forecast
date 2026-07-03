@@ -412,7 +412,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // 1. Filter inventory for this vendor, un-ordered parts only
         let candidates = fullInventory.filter(item => 
             item['Vendor Name'] === currentOptimizerVendor && 
-            (item['Suggested_Order_Qty'] === 0 || !item['Suggested_Order_Qty'])
+            (item['Suggested_Order_Qty'] === 0 || !item['Suggested_Order_Qty']) &&
+            (item['pi_cost'] && item['pi_cost'] > 0)
         );
         
         // 2. Calculate surplus
@@ -428,29 +429,46 @@ document.addEventListener('DOMContentLoaded', () => {
         const tbody = document.querySelector('#table-optimizer tbody');
         tbody.innerHTML = '';
         
-        let selectedParts = [];
+        let selectedPartsMap = new Map();
         
-        for (let item of candidates) {
-            if (gap <= 0) break;
-            
-            // Suggest 1 month supply, rounded up to the nearest whole unit
-            let suggestedQty = Math.ceil(item['AI_Forecast_M1']) || 1;
-            if (suggestedQty <= 0) suggestedQty = 1;
-            
-            let cost = item['pi_cost'] || 0;
-            let totalLineCost = suggestedQty * cost;
-            
-            selectedParts.push({
-                part: item['pi_part_no'],
-                desc: item['pi_description'],
-                surplus: item._surplus,
-                qty: suggestedQty,
-                lineCost: totalLineCost
-            });
-            
-            gap -= totalLineCost;
-            addedCost += totalLineCost;
+        if (candidates.length > 0) {
+            let loopGuard = 0;
+            while (gap > 0 && loopGuard < 100) {
+                let addedInPass = false;
+                for (let item of candidates) {
+                    if (gap <= 0) break;
+                    
+                    // Suggest 1 month supply, rounded up to the nearest whole unit
+                    let suggestedQty = Math.ceil(item['AI_Forecast_M1']) || 1;
+                    if (suggestedQty <= 0) suggestedQty = 1;
+                    
+                    let cost = item['pi_cost'];
+                    let totalLineCost = suggestedQty * cost;
+                    
+                    if (selectedPartsMap.has(item['pi_part_no'])) {
+                        let existing = selectedPartsMap.get(item['pi_part_no']);
+                        existing.qty += suggestedQty;
+                        existing.lineCost += totalLineCost;
+                    } else {
+                        selectedPartsMap.set(item['pi_part_no'], {
+                            part: item['pi_part_no'],
+                            desc: item['pi_description'],
+                            surplus: item._surplus,
+                            qty: suggestedQty,
+                            lineCost: totalLineCost
+                        });
+                    }
+                    
+                    gap -= totalLineCost;
+                    addedCost += totalLineCost;
+                    addedInPass = true;
+                }
+                if (!addedInPass) break;
+                loopGuard++;
+            }
         }
+        
+        let selectedParts = Array.from(selectedPartsMap.values());
         
         selectedParts.forEach(sp => {
             const tr = document.createElement('tr');
