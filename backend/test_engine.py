@@ -8,7 +8,7 @@ load_dotenv()
 conn_str = os.getenv("FABRIC_CONNECTION_STRING", "")
 
 print("Fetching inventory...")
-express, other = fetch_inventory_data(conn_str)
+express = fetch_inventory_data(conn_str)
 
 print("Loading lead times...")
 lt_file = "../Vendor Lead Times 231215 BN - updated W9-29-2025.xlsx"

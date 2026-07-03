@@ -9,7 +9,7 @@ load_dotenv()
 conn_str = os.getenv("FABRIC_CONNECTION_STRING", "")
 
 print("Fetching data...")
-express, other = fetch_inventory_data(conn_str)
+express = fetch_inventory_data(conn_str)
 
 print("Vendor slicer in express:", 'vendor_slicer' in express.columns)
 # Check 6688

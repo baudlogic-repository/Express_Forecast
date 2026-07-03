@@ -5,11 +5,11 @@ import os
 def fetch_inventory_data(connection_string: str = None):
     """
     Connects to Microsoft Fabric SQL Analytics Endpoint and fetches inventory data.
-    Returns two DataFrames: express_inv, other_inv
+    Returns a single DataFrame containing Branch 01 inventory.
     """
     if not connection_string:
         raise ValueError("No connection string provided.")
-    query_parts = "SELECT * FROM JS_jdis_Part_Information"
+    query_parts = "SELECT * FROM JS_jdis_Part_Information WHERE PI_Branch = '01'"
     query_vendors = "SELECT ACC_NO, Vendor_Slicer FROM JS_Vendor_List"
     try:
         print("Connecting to Fabric SQL Analytics Endpoint...")
@@ -36,15 +36,9 @@ def fetch_inventory_data(connection_string: str = None):
         if 'pi_branch' not in df.columns:
             raise KeyError(f"'pi_branch' column not found in Fabric. Available columns are: {list(df.columns)}")
             
-        # Split logic as requested
         df['pi_branch'] = df['pi_branch'].astype(str).str.strip()
         
-        # 'Express Inventory.xlsx' -> pi_branch == '01'
-        # 'Other Location Inventory.xlsx' -> pi_branch != '01'
-        express_inv = df[df['pi_branch'] == '01'].copy()
-        other_inv = df[df['pi_branch'] != '01'].copy()
-        
-        return express_inv, other_inv
+        return df
     except Exception as e:
         print(f"Error querying Fabric: {e}")
         raise e

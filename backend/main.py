@@ -34,7 +34,7 @@ def generate_forecast(request: ForecastRequest):
     try:
         # 1. Fetch data from Fabric (or mock)
         conn_str = request.connection_string if request.connection_string else DEFAULT_CONNECTION_STRING
-        express_inv, other_inv = fetch_inventory_data(conn_str)
+        express_inv = fetch_inventory_data(conn_str)
         
         # 2. Read local lead time file
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -47,7 +47,7 @@ def generate_forecast(request: ForecastRequest):
 
         # 3. Run engine
         results = run_forecast_logic(
-            inventory_dfs=[express_inv, other_inv],
+            inventory_dfs=[express_inv],
             lead_time_df=lead_time_df
         )
         

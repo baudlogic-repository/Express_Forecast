@@ -7,7 +7,7 @@ load_dotenv()
 conn_str = os.getenv("FABRIC_CONNECTION_STRING", "")
 
 print("Fetching inventory...")
-express, other = fetch_inventory_data(conn_str)
+express = fetch_inventory_data(conn_str)
 
 df = express.copy()
 print("pi_current_mo_sales sum:", df['pi_current_mo_sales'].astype(float).sum())
