@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Express Inventory AI Forecaster</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cabin:wght@500;600;700&family=Open+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="glass-background"></div>
+    <div class="dashboard-container">
+        
+        <header class="glass-panel">
+            <div class="header-content">
+                <h1>Express Inventory <span>AI Forecaster</span></h1>
+                <p>Intelligent restocking powered by machine learning.</p>
+            </div>
+            <div class="controls">
+                <button id="btn-run" class="btn-primary">Generate Forecast</button>
+                <button id="btn-export" class="btn-secondary" disabled>Export to Excel</button>
+            </div>
+        </header>
+
+        <main class="glass-panel" id="main-content" style="display: none;">
+            <div class="tabs">
+                <button class="tab-btn active" data-target="tab-line">Line Details</button>
+                <button class="tab-btn" data-target="tab-ds">DS Suggestions</button>
+                <button class="tab-btn" data-target="tab-forecast">AI Forecast</button>
+                <button class="tab-btn" data-target="tab-accuracy">AI Accuracy</button>
+                <button class="tab-btn" data-target="tab-vendor">Vendor Summary</button>
+                <button class="tab-btn" data-target="tab-rop">ROP History</button>
+                <button class="tab-btn" data-target="tab-deadstock" style="background-color: rgba(239,68,68,0.1); color: #ef4444; border-color: #ef4444;">Dead Stock</button>
+            </div>
+
+            <!-- Existing Tabs (truncated for brevity in diff, keep as is) -->
+            <div class="tab-content active" id="tab-line">
+                <div class="table-container">
+                    <table id="table-line"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+            <div class="tab-content" id="tab-ds">
+                <div class="table-container">
+                    <table id="table-ds"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+            <div class="tab-content" id="tab-forecast">
+                <div class="table-container">
+                    <table id="table-forecast"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+            <div class="tab-content" id="tab-vendor">
+                <div class="table-container">
+                    <table id="table-vendor"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+            <div class="tab-content" id="tab-accuracy">
+                <div class="chart-container" style="position: relative; height:300px; width:100%; margin-bottom: 2rem;">
+                    <canvas id="accuracyChart"></canvas>
+                </div>
+                <div style="margin-bottom: 10px; position: sticky; top: 0; z-index: 10; background: var(--glass-bg); padding: 10px 0; border-bottom: 1px solid var(--glass-border);">
+                    <input type="text" id="accuracy-search" placeholder="Search Part Number..." style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid #ccc; outline: none;">
+                </div>
+                <div class="table-container" style="overflow-x: hidden;">
+                    <table id="table-accuracy" style="width: 100%;"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+
+            <!-- New ROP History Tab -->
+            <div class="tab-content" id="tab-rop">
+                <div style="display: flex; gap: 20px;">
+                    <div class="table-container" style="flex: 1; max-height: 500px; overflow-y: auto;">
+                        <div style="position: sticky; top: 0; background: var(--glass-bg); z-index: 2; padding: 10px 0; border-bottom: 1px solid var(--glass-border); margin-bottom: 5px;">
+                            <input type="text" id="rop-search" placeholder="Search Part Number..." style="width: 100%; box-sizing: border-box; padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
+                        </div>
+                        <table id="table-rop-parts">
+                            <thead><tr><th>Part Number</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="chart-container" style="flex: 2; position: relative; height:400px; background: rgba(255,255,255,0.8); border-radius: 8px; padding: 15px;">
+                        <canvas id="ropChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dead Stock Tab -->
+            <div class="tab-content" id="tab-deadstock">
+                <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid #fca5a5; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h3 style="margin: 0 0 10px 0; color: #b91c1c;">Excess Inventory Radar</h3>
+                    <p style="margin: 0; font-size: 0.9rem; color: #7f1d1d;">These parts have an On-Hand quantity that exceeds the AI's projected demand for the entire next 12 months. This represents locked capital that could potentially be recovered.</p>
+                </div>
+                <div class="table-container">
+                    <table id="table-deadstock"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Accuracy Graph Modal -->
+        <div id="accuracy-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-content glass-panel" style="width: 80%; max-width: 800px; background: #fff;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2 id="modal-accuracy-title" style="margin: 0; color: #b71234;">Accuracy History</h2>
+                    <button id="modal-accuracy-close" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+                </div>
+                <div class="chart-container" style="position: relative; height:400px; width:100%;">
+                    <canvas id="partAccuracyChart"></canvas>
+                </div>
+            </div>
+        </div>
+            </div>
+        </div>
+        
+        <!-- Freight Optimizer Modal -->
+        <div id="optimizer-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-content glass-panel" style="width: 80%; max-width: 800px; background: #fff;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2 id="modal-vendor-name" style="margin: 0; color: #b71234;">Vendor Optimization</h2>
+                    <button id="modal-close" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+                </div>
+                
+                <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 20px;">
+                    <label><strong>Current PO:</strong> <span id="modal-current-po"></span></label>
+                    <label><strong>Target Amount: $</strong>
+                        <input type="number" id="modal-target-amount" style="padding: 5px; width: 120px;" step="100">
+                    </label>
+                    <button id="btn-optimize" class="btn-primary" style="padding: 5px 15px;">Optimize</button>
+                </div>
+
+                <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+                    <table id="table-optimizer">
+                        <thead>
+                            <tr>
+                                <th>Part Number</th>
+                                <th>Description</th>
+                                <th>Units Until Reorder</th>
+                                <th>Suggested Order Qty</th>
+                                <th>Cost Added</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 15px; text-align: right; font-size: 1.2rem;">
+                    <strong>New PO Total: </strong><span id="modal-new-po" style="color: #b71234;">$0.00</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="loading-overlay" class="glass-panel" style="display: none;">
+            <div class="spinner"></div>
+            <p>Processing AI Forecast...</p>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
