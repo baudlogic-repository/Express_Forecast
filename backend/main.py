@@ -37,8 +37,8 @@ def generate_forecast(request: ForecastRequest):
         express_inv, other_inv = fetch_inventory_data(conn_str)
         
         # 2. Read local lead time file
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        lt_path = os.path.join(base_dir, "..", "Vendor Lead Times 231215 BN - updated W9-29-2025.xlsx")
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        lt_path = os.path.join(base_dir, "data", "Vendor Lead Times 231215 BN - updated W9-29-2025.xlsx")
         if os.path.exists(lt_path):
             lead_time_df = pd.read_excel(lt_path, engine='openpyxl')
         else:
