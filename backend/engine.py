@@ -49,7 +49,16 @@ def run_forecast_logic(inventory_dfs, lead_time_df, status_callback=None):
             if 'pi_bin' in df.columns:
                 log(f"   - Cleaning bins...")
                 df['pi_bin'] = df['pi_bin'].astype(str).replace(['nan', 'None'], '')
-                exclude_mask = df['pi_bin'].apply(lambda x: len(str(x).strip()) > 1 and set(str(x).strip()) == {'*'})
+                
+                def is_invalid_bin(x):
+                    s = str(x).strip()
+                    if not s: # Empty bin
+                        return True
+                    if len(s) > 1 and set(s) == {'*'}: # Asterisk-only bin
+                        return True
+                    return False
+                    
+                exclude_mask = df['pi_bin'].apply(is_invalid_bin)
                 df = df[~exclude_mask]
             
             # Force numeric sales
