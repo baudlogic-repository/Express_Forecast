@@ -44,23 +44,13 @@ def run_forecast_logic(inventory_dfs, lead_time_df, status_callback=None):
             continue
         log(f"Cleaning dataset {i+1}...")
         try:
-            
-            # Filter out invalid bins (per user request)
-            if 'pi_bin' in df.columns:
-                log(f"   - Cleaning bins...")
-                df['pi_bin'] = df['pi_bin'].astype(str).replace(['nan', 'None'], '')
+            # Standardize column types
+            if 'pi_branch' in df.columns:
+                df['pi_branch'] = df['pi_branch'].astype(str).str.strip()
+            else:
+                # If no branch column, assume it's all branch 01 for fallback
+                df['pi_branch'] = '01'
                 
-                def is_invalid_bin(x):
-                    s = str(x).strip()
-                    if not s: # Empty bin
-                        return True
-                    if len(s) > 1 and set(s) == {'*'}: # Asterisk-only bin
-                        return True
-                    return False
-                    
-                exclude_mask = df['pi_bin'].apply(is_invalid_bin)
-                df = df[~exclude_mask]
-            
             # Force numeric sales
             log(f"   - Standardizing sales data...")
             sales_variants = ['pi_current_mo_sales', 'pi_Current_Mo_Sales']
@@ -76,12 +66,6 @@ def run_forecast_logic(inventory_dfs, lead_time_df, status_callback=None):
             history_cols = [c for c in df.columns if c.startswith('pi_sales_history_')]
             for col in history_cols:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
-            # Only keep items with at least some history
-            log(f"   - Filtering active parts...")
-            existing_check_cols = [c for c in ['pi_current_mo_sales'] + history_cols if c in df.columns]
-            if existing_check_cols:
-                df = df[df[existing_check_cols].sum(axis=1) > 0].copy()
             
             all_dfs.append(df)
         except Exception as e:
@@ -102,34 +86,49 @@ def run_forecast_logic(inventory_dfs, lead_time_df, status_callback=None):
         log(f"Warning: Could not process lead time data. Using defaults. Details: {e}")
         lt_df = pd.DataFrame(columns=['Vendor Code', 'Vendor Name', 'Lead Time Days'])
 
-    # 3. AGGREGATION
-    log("Aggregating multi-location inventory...")
-    history_cols = sorted([c for c in full_inv.columns if c.startswith('pi_sales_history_')])
-    sales_cols_for_agg = ['pi_current_mo_sales'] + history_cols
-
-    agg_rules = {}
-    if 'pi_bin_qty' in full_inv.columns: agg_rules['pi_bin_qty'] = 'sum'
-    for col in ['pi_description', 'pi_bin', 'pi_vendor_code', 'vendor_slicer']:
-        if col in full_inv.columns: agg_rules[col] = 'first'
-    if 'pi_cost' in full_inv.columns:
-        agg_rules['pi_cost'] = 'mean'
-    elif 'pi_inventory_cost' in full_inv.columns: 
-        full_inv['pi_cost'] = full_inv['pi_inventory_cost']
-        agg_rules['pi_cost'] = 'mean'
-    
-    if 'pi_on_order' in full_inv.columns: agg_rules['pi_on_order'] = 'sum'
-    for col in sales_cols_for_agg:
-        if col in full_inv.columns: agg_rules[col] = 'sum'
-    
-    # Check for Creation Date columns (case-insensitive)
-    for col in full_inv.columns:
-        if col.lower() in ['creation date', 'creation_date', 'pi_creation_date']:
-            agg_rules[col] = 'first'
-    
+    # 3. AGGREGATION & BRANCH SPLIT
+    log("Aggregating sales across branches while isolating Branch 01 inventory...")
     if 'pi_part_no' not in full_inv.columns:
         raise ValueError("Critical Error: 'pi_part_no' column missing from all input files.")
         
-    full_inv = full_inv.groupby('pi_part_no').agg(agg_rules).reset_index()
+    history_cols = sorted([c for c in full_inv.columns if c.startswith('pi_sales_history_')])
+    sales_cols_for_agg = ['pi_current_mo_sales'] + history_cols
+    
+    # 3A. Aggregate sales across ALL branches
+    sales_agg_rules = {col: 'sum' for col in sales_cols_for_agg if col in full_inv.columns}
+    sales_df = full_inv.groupby('pi_part_no').agg(sales_agg_rules).reset_index()
+    
+    # 3B. Isolate inventory metrics for Branch 01
+    branch_01_df = full_inv[full_inv['pi_branch'] == '01'].copy()
+    
+    # Drop the original sales columns from Branch 01 so we can merge the aggregated ones cleanly
+    branch_01_df.drop(columns=[c for c in sales_cols_for_agg if c in branch_01_df.columns], inplace=True)
+    
+    # Merge them together (inner join ensures we only keep parts that actually exist in Branch 01)
+    full_inv = branch_01_df.merge(sales_df, on='pi_part_no', how='inner')
+    
+    # Apply Bin Filter specifically to Branch 01
+    if 'pi_bin' in full_inv.columns:
+        log("   - Cleaning Branch 01 bins...")
+        full_inv['pi_bin'] = full_inv['pi_bin'].astype(str).replace(['nan', 'None'], '')
+        
+        def is_invalid_bin(x):
+            s = str(x).strip()
+            if not s: return True # Empty bin
+            if len(s) > 1 and set(s) == {'*'}: return True # Asterisk-only bin
+            return False
+            
+        exclude_mask = full_inv['pi_bin'].apply(is_invalid_bin)
+        full_inv = full_inv[~exclude_mask]
+        
+    # Apply Active Sales Filter to the newly aggregated company-wide sales
+    log("   - Filtering active parts...")
+    existing_check_cols = [c for c in sales_cols_for_agg if c in full_inv.columns]
+    if existing_check_cols:
+        full_inv = full_inv[full_inv[existing_check_cols].sum(axis=1) > 0].copy()
+    
+    if 'pi_inventory_cost' in full_inv.columns and 'pi_cost' not in full_inv.columns: 
+        full_inv['pi_cost'] = full_inv['pi_inventory_cost']
 
     # 4. AI FORECASTING
     log("Running AI Forecasting (Seasonal Average)...")

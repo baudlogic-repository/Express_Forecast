@@ -9,7 +9,7 @@ def fetch_inventory_data(connection_string: str = None):
     """
     if not connection_string:
         raise ValueError("No connection string provided.")
-    query_parts = "SELECT * FROM JS_jdis_Part_Information WHERE pi_Branch = '01'"
+    query_parts = "SELECT * FROM JS_jdis_Part_Information"
     query_vendors = "SELECT ACC_NO, Vendor_Slicer FROM JS_Vendor_List"
     try:
         print("Connecting to Fabric SQL Analytics Endpoint...")
