@@ -4,6 +4,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadingOverlay = document.getElementById('loading-overlay');
     const mainContent = document.getElementById('main-content');
     
+    // Automatically load strategy parts on startup
+    mainContent.style.display = 'block';
+    fetchStrategyParts();
+    
     let currentExcelBase64 = null;
     let accuracyChart = null;
     let ropChart = null;
@@ -212,21 +216,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderTable('table-vendor', result.data.vendor_summary);
                 renderTable('table-deadstock', result.data.dead_stock_radar);
                 
-                if (result.data.chart_data && result.data.chart_data.length > 0) {
-                    renderAccuracyChart(result.data.chart_data);
-                }
+                // Update fullInventory for strategy tab and re-render
+                fullInventory = result.data.full_inventory || [];
+                renderStrategyTable();
                 
-                currentExcelBase64 = result.excel_base64;
-                btnExport.disabled = false;
+                // Unhide other tabs now that forecast is done
+                document.getElementById('btn-tab-forecast').style.display = 'inline-block';
+                document.getElementById('btn-tab-vendor').style.display = 'inline-block';
+                document.getElementById('btn-tab-rop').style.display = 'inline-block';
+                document.getElementById('btn-tab-deadstock').style.display = 'inline-block';
                 
-                loadingOverlay.style.display = 'none';
-                mainContent.style.display = 'block';
+                // Switch to forecast tab
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.getElementById('btn-tab-forecast').classList.add('active');
+                document.getElementById('tab-forecast').classList.add('active');
                 
-                // Re-fetch ROPs so any newly saved ROPs are available
-                fetchRopHistory();
-                
-                // Set up accuracy search listener
-                setupAccuracySearch(result.data.ai_accuracy);
             }
         } catch (err) {
             alert("Failed to generate forecast: " + err.message);
@@ -236,6 +241,135 @@ document.addEventListener('DOMContentLoaded', () => {
             btnRun.textContent = "Generate Forecast";
         }
     });
+
+    // ==========================================
+    // ORDER STRATEGY LOGIC
+    // ==========================================
+    
+    async function fetchStrategyParts() {
+        try {
+            const res = await fetch('/api/strategy_parts');
+            const result = await res.json();
+            if(result.status === 'success') {
+                fullInventory = result.data;
+                setupStrategyTab();
+            }
+        } catch(e) {
+            console.error("Error fetching strategy parts on load", e);
+            document.querySelector('#table-strategy tbody').innerHTML = '<tr><td colspan="6" style="text-align:center; color:red;">Error loading parts. Check connection.</td></tr>';
+        }
+    }
+
+    function setupStrategyTab() {
+        const vendorFilter = document.getElementById('strategy-vendor-filter');
+        if (!vendorFilter) return;
+        
+        // Extract unique vendors
+        const vendors = [...new Set(fullInventory.map(item => item['Vendor Name'] || item['pi_vendor_code'] || 'Unknown'))].sort();
+        
+        vendorFilter.innerHTML = '<option value="ALL">All Vendors</option>';
+        vendors.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = v;
+            vendorFilter.appendChild(opt);
+        });
+        
+        // Default select first vendor to avoid huge initial render if they click it
+        if (vendors.length > 0) {
+            vendorFilter.value = vendors[0];
+        }
+        
+        renderStrategyTable();
+        
+        vendorFilter.onchange = () => renderStrategyTable();
+    }
+    
+    function renderStrategyTable() {
+        const tbody = document.querySelector('#table-strategy tbody');
+        const thead = document.querySelector('#table-strategy thead');
+        const filterVal = document.getElementById('strategy-vendor-filter').value;
+        
+        if (!fullInventory || fullInventory.length === 0) return;
+        
+        // Headers
+        thead.innerHTML = `
+            <tr>
+                <th>Part Number</th>
+                <th>Vendor</th>
+                <th>Description</th>
+                <th>Reorder Point (ROP)</th>
+                <th>Suggested Order</th>
+                <th>Target Months of Supply</th>
+            </tr>
+        `;
+        
+        // Filter Data
+        let displayData = fullInventory;
+        if (filterVal !== 'ALL') {
+            displayData = fullInventory.filter(item => (item['Vendor Name'] || item['pi_vendor_code'] || 'Unknown') === filterVal);
+        }
+        
+        tbody.innerHTML = '';
+        displayData.forEach(item => {
+            const partNo = item['pi_part_no'];
+            const tr = document.createElement('tr');
+            
+            const currentMos = item['Months_of_Supply'] || 2;
+            
+            tr.innerHTML = `
+                <td>${partNo}</td>
+                <td>${item['Vendor Name'] || item['pi_vendor_code'] || 'Unknown'}</td>
+                <td>${item['pi_description'] || ''}</td>
+                <td>${item['Reorder_Point'] !== undefined ? item['Reorder_Point'] : '---'}</td>
+                <td>${item['Suggested_Order_Qty'] !== undefined ? item['Suggested_Order_Qty'] : '---'}</td>
+                <td>
+                    <input type="number" min="1" max="24" class="mos-input" data-part="${partNo}" value="${currentMos}" style="width: 80px; padding: 5px; border-radius: 4px; border: 1px solid #cbd5e1;">
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        
+        // Attach autosave listeners
+        document.querySelectorAll('.mos-input').forEach(input => {
+            input.addEventListener('change', async (e) => {
+                const pNo = e.target.getAttribute('data-part');
+                const val = parseInt(e.target.value);
+                if (val > 0) {
+                    await autoSaveStrategy(pNo, val);
+                }
+            });
+        });
+    }
+    
+    async function autoSaveStrategy(partNo, mosValue) {
+        const payload = {
+            overrides: [{ part_no: partNo, months_of_supply: mosValue }]
+        };
+        
+        try {
+            const res = await fetch('/api/overrides', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            if (res.ok) {
+                // Update local data so it sticks
+                const item = fullInventory.find(i => i.pi_part_no === partNo);
+                if (item) item.Months_of_Supply = mosValue;
+                
+                // Show tiny checkmark
+                const statusSpan = document.getElementById('autosave-status');
+                if (statusSpan) {
+                    statusSpan.style.opacity = '1';
+                    setTimeout(() => statusSpan.style.opacity = '0', 1500);
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
 
     // Export to Excel
     btnExport.addEventListener('click', () => {

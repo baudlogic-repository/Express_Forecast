@@ -24,18 +24,43 @@
         </header>
 
         <main class="glass-panel" id="main-content" style="display: none;">
-            <div class="tabs">
-                <button class="tab-btn active" data-target="tab-line">Line Details</button>
-                <button class="tab-btn" data-target="tab-ds">DS Suggestions</button>
-                <button class="tab-btn" data-target="tab-forecast">AI Forecast</button>
-                <button class="tab-btn" data-target="tab-accuracy">AI Accuracy</button>
-                <button class="tab-btn" data-target="tab-vendor">Vendor Summary</button>
-                <button class="tab-btn" data-target="tab-rop">ROP History</button>
-                <button class="tab-btn" data-target="tab-deadstock" style="background-color: rgba(239,68,68,0.1); color: #ef4444; border-color: #ef4444;">Dead Stock</button>
+            <!-- Tabs Navigation -->
+            <div class="tabs-nav" id="main-tabs">
+                <button class="tab-btn" data-target="tab-forecast" id="btn-tab-forecast" style="display: none;">AI Generated Orders</button>
+                <button class="tab-btn" data-target="tab-vendor" id="btn-tab-vendor" style="display: none;">Vendor Summary</button>
+                <button class="tab-btn" data-target="tab-rop" id="btn-tab-rop" style="display: none;">ROP History</button>
+                <button class="tab-btn" data-target="tab-deadstock" id="btn-tab-deadstock" style="display: none; background-color: rgba(239,68,68,0.1); color: #ef4444; border-color: #ef4444;">Dead Stock</button>
+                <button class="tab-btn active" data-target="tab-strategy" id="btn-tab-strategy">Order Strategy</button>
             </div>
 
-            <!-- Existing Tabs (truncated for brevity in diff, keep as is) -->
-            <div class="tab-content active" id="tab-line">
+            <!-- Tab: Order Strategy -->
+            <div id="tab-strategy" class="tab-content active">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <div>
+                            <h2 style="margin: 0; color: #1e293b; font-size: 1.25rem;">Custom Order Strategy</h2>
+                            <p style="margin: 5px 0 0 0; color: #64748b; font-size: 0.9rem;">Edit the target Months of Supply for each part.</p>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <span id="autosave-status" style="color: #10b981; font-weight: bold; opacity: 0; transition: opacity 0.5s;">✅ Saved!</span>
+                            <select id="strategy-vendor-filter" class="search-input" style="width: 250px;">
+                                <option value="ALL">All Vendors</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" id="table-strategy">
+                            <thead></thead>
+                            <tbody>
+                                <tr><td colspan="6" style="text-align: center;">Loading strategy parts...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: AI Generated Orders (Default) -->
+            <div id="tab-forecast" class="tab-content">
                 <div class="table-container">
                     <table id="table-line"><thead></thead><tbody></tbody></table>
                 </div>

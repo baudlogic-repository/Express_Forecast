@@ -114,6 +114,51 @@ def save_overrides(req: OverrideRequest):
         print(f"Error saving overrides: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/strategy_parts")
+def get_strategy_parts():
+    try:
+        # 1. Fetch live inventory
+        express_inv = fetch_inventory_data(DEFAULT_CONNECTION_STRING)
+        
+        # 2. Group to unique parts
+        grouped = express_inv.groupby('pi_part_no').agg({
+            'vendor_slicer': 'first',
+            'pi_vendor_code': 'first',
+            'pi_description': 'first'
+        }).reset_index()
+        
+        grouped['vendor_slicer'] = grouped['vendor_slicer'].fillna('')
+        grouped['pi_vendor_code'] = grouped['pi_vendor_code'].fillna('')
+        grouped['Vendor Name'] = grouped.apply(
+            lambda row: row['vendor_slicer'] if str(row['vendor_slicer']).strip() else str(row['pi_vendor_code']), 
+            axis=1
+        )
+        
+        # 3. Fetch overrides from SQLite
+        import sqlite3
+        db_path = r"S:\Inventory Data\forecast_history.db" if os.path.exists(r"S:\Inventory Data") else "forecast_history.db"
+        conn = sqlite3.connect(db_path)
+        overrides_df = pd.read_sql("SELECT part_no as pi_part_no, months_of_supply as Months_of_Supply FROM part_strategy_overrides", conn)
+        conn.close()
+        
+        overrides_df['pi_part_no'] = overrides_df['pi_part_no'].astype(str).str.strip()
+        overrides_df['Months_of_Supply'] = pd.to_numeric(overrides_df['Months_of_Supply'], errors='coerce').fillna(2)
+        
+        # 4. Merge
+        merged = grouped.merge(overrides_df, on='pi_part_no', how='left')
+        merged['Months_of_Supply'] = merged['Months_of_Supply'].fillna(2)
+        
+        # 5. Return JSON
+        res_df = merged[['pi_part_no', 'Vendor Name', 'pi_description', 'Months_of_Supply']].copy()
+        # Add empty columns for ROP and Suggested Order since they aren't calculated yet
+        res_df['Reorder_Point'] = '---'
+        res_df['Suggested_Order_Qty'] = '---'
+        
+        return {"status": "success", "data": json.loads(res_df.to_json(orient="records"))}
+    except Exception as e:
+        print(f"Error fetching strategy parts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/rops")
 def get_rop_history():
     try:
