@@ -29,8 +29,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Sort state map
+    const tableSortStates = {};
+
     // Helper to render table
     function renderTable(tableId, dataArray) {
+        if (!tableSortStates[tableId]) {
+            tableSortStates[tableId] = { col: null, asc: true };
+        }
+        const state = tableSortStates[tableId];
+
         if (tableId === 'table-accuracy') {
             const countEl = document.getElementById('accuracy-count');
             if(countEl) countEl.textContent = `Showing ${dataArray ? dataArray.length : 0} items`;
@@ -58,6 +66,47 @@ document.addEventListener('DOMContentLoaded', () => {
         headers.forEach(h => {
             const th = document.createElement('th');
             th.textContent = h;
+            if (state.col === h) {
+                th.textContent += state.asc ? ' ▲' : ' ▼';
+            }
+            th.style.cursor = 'pointer';
+            th.title = "Click to sort";
+            
+            th.addEventListener('click', () => {
+                if (state.col === h) {
+                    state.asc = !state.asc;
+                } else {
+                    state.col = h;
+                    state.asc = true;
+                }
+                
+                // Sort dataArray in place
+                dataArray.sort((a, b) => {
+                    let valA = a[h];
+                    let valB = b[h];
+                    
+                    if (valA == null) valA = '';
+                    if (valB == null) valB = '';
+                    
+                    // Remove currency symbols for sorting if string looks like money
+                    if (typeof valA === 'string' && valA.startsWith('$')) {
+                        valA = parseFloat(valA.replace(/[^0-9.-]+/g,"")) || 0;
+                    }
+                    if (typeof valB === 'string' && valB.startsWith('$')) {
+                        valB = parseFloat(valB.replace(/[^0-9.-]+/g,"")) || 0;
+                    }
+                    
+                    if (typeof valA === 'string' && typeof valB === 'string') {
+                        return state.asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                    }
+                    
+                    if (valA < valB) return state.asc ? -1 : 1;
+                    if (valA > valB) return state.asc ? 1 : -1;
+                    return 0;
+                });
+                
+                renderTable(tableId, dataArray);
+            });
             trHead.appendChild(th);
         });
         
