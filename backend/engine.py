@@ -212,6 +212,25 @@ def run_forecast_logic(inventory_dfs, lead_time_df, status_callback=None):
 
     # 5. ORDER CALCULATIONS
     log("Calculating inventory metrics...")
+    
+    import os
+    # Load overrides if they exist
+    overrides_path = "data/Part_Strategy_Overrides.csv"
+    if os.path.exists(overrides_path):
+        try:
+            overrides_df = pd.read_csv(overrides_path)
+            overrides_df.columns = ['Part_Number', 'Months_of_Supply']
+            overrides_df['Part_Number'] = overrides_df['Part_Number'].astype(str)
+            overrides_df['Months_of_Supply'] = pd.to_numeric(overrides_df['Months_of_Supply'], errors='coerce')
+            full_inv = full_inv.merge(overrides_df, left_on='pi_part_no', right_on='Part_Number', how='left')
+            full_inv['Months_of_Supply'] = full_inv['Months_of_Supply'].fillna(2)
+            full_inv.drop(columns=['Part_Number'], inplace=True)
+        except Exception as e:
+            log(f"Warning: Could not load overrides. Defaulting to 2 months. Error: {e}")
+            full_inv['Months_of_Supply'] = 2
+    else:
+        full_inv['Months_of_Supply'] = 2
+        
     lt_df['Vendor Code'] = pd.to_numeric(lt_df['Vendor Code'], errors='coerce').fillna(0).astype(int)
     full_inv['pi_vendor_code'] = pd.to_numeric(full_inv['pi_vendor_code'], errors='coerce').fillna(0).astype(int)
     full_inv = full_inv.merge(lt_df[['Vendor Code', 'Lead Time Days', 'Vendor Name']], 
@@ -221,10 +240,37 @@ def run_forecast_logic(inventory_dfs, lead_time_df, status_callback=None):
         full_inv['Vendor Name'] = full_inv['vendor_slicer'].combine_first(full_inv['Vendor Name'])
     
     full_inv['Lead Time Days'] = pd.to_numeric(full_inv['Lead Time Days'], errors='coerce').fillna(14)
-    full_inv['Demand_During_Lead_Time'] = (full_inv['AI_Forecast_M1'] / 30) * full_inv['Lead Time Days']
+    
+    def calc_demand_over_days(row, days):
+        demand = 0
+        remaining_days = days
+        for i in range(1, 13):
+            if remaining_days <= 0:
+                break
+            days_in_month = 30
+            month_forecast = row.get(f'AI_Forecast_M{i}', 0)
+            
+            if remaining_days >= days_in_month:
+                demand += month_forecast
+                remaining_days -= days_in_month
+            else:
+                demand += month_forecast * (remaining_days / days_in_month)
+                remaining_days = 0
+                
+        # If days exceed 12 months, extrapolate using M12
+        if remaining_days > 0:
+            last_month_rate = row.get('AI_Forecast_M12', 0) / 30
+            demand += remaining_days * last_month_rate
+            
+        return demand
+        
+    full_inv['Demand_During_Lead_Time'] = full_inv.apply(lambda r: calc_demand_over_days(r, r['Lead Time Days']), axis=1)
+    full_inv['Order_Cycle_Demand'] = full_inv.apply(lambda r: calc_demand_over_days(r, r['Lead Time Days'] + (r['Months_of_Supply'] * 30)) - r['Demand_During_Lead_Time'], axis=1)
+    
     full_inv['Safety_Stock'] = full_inv['Demand_During_Lead_Time'] * 0.20
     full_inv['Reorder_Point'] = np.ceil(full_inv['Demand_During_Lead_Time'] + full_inv['Safety_Stock'])
-    full_inv['Target_Stock'] = full_inv['AI_Forecast_M1'] + full_inv['AI_Forecast_M2']
+    full_inv['Target_Stock'] = full_inv['Demand_During_Lead_Time'] + full_inv['Safety_Stock'] + full_inv['Order_Cycle_Demand']
+    
     full_inv['Total_Available'] = full_inv.get('pi_bin_qty', 0) + full_inv.get('pi_on_order', 0)
 
     full_inv['Suggested_Order_Qty'] = np.where(
