@@ -83,6 +83,37 @@ def generate_forecast(request: ForecastRequest):
         print(f"Error during forecast: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class OverrideItem(BaseModel):
+    part_no: str
+    months_of_supply: int
+
+class OverrideRequest(BaseModel):
+    overrides: list[OverrideItem]
+
+@app.post("/api/overrides")
+def save_overrides(req: OverrideRequest):
+    try:
+        import sqlite3
+        db_path = r"S:\Inventory Data\forecast_history.db" if os.path.exists(r"S:\Inventory Data") else "forecast_history.db"
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("CREATE TABLE IF NOT EXISTS part_strategy_overrides (part_no TEXT PRIMARY KEY, months_of_supply INTEGER)")
+        
+        for item in req.overrides:
+            cursor.execute(
+                "INSERT INTO part_strategy_overrides (part_no, months_of_supply) VALUES (?, ?) "
+                "ON CONFLICT(part_no) DO UPDATE SET months_of_supply=excluded.months_of_supply",
+                (item.part_no, item.months_of_supply)
+            )
+        
+        conn.commit()
+        conn.close()
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error saving overrides: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/rops")
 def get_rop_history():
     try:
