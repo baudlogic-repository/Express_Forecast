@@ -213,26 +213,7 @@ def run_forecast_logic(inventory_dfs, lead_time_df, status_callback=None):
     # 5. ORDER CALCULATIONS
     log("Calculating inventory metrics...")
     
-    import os
-    # 4b. Load Part Strategy Overrides from SQLite
-    log("Applying part strategy overrides from database...")
-    try:
-        import sqlite3
-        db_path = r"S:\Inventory Data\forecast_history.db" if os.path.exists(r"S:\Inventory Data") else "forecast_history.db"
-        conn = sqlite3.connect(db_path)
-        overrides_df = pd.read_sql("SELECT part_no as Part_Number, months_of_supply as Months_of_Supply FROM part_strategy_overrides", conn)
-        conn.close()
-        
-        overrides_df['Part_Number'] = overrides_df['Part_Number'].astype(str).str.strip()
-        overrides_df['Months_of_Supply'] = pd.to_numeric(overrides_df['Months_of_Supply'], errors='coerce').fillna(2)
-        
-        # Merge the overrides into full_inv
-        full_inv = full_inv.merge(overrides_df[['Part_Number', 'Months_of_Supply']], left_on='pi_part_no', right_on='Part_Number', how='left')
-        full_inv['Months_of_Supply'] = full_inv['Months_of_Supply'].fillna(2)
-        full_inv.drop(columns=['Part_Number'], inplace=True, errors='ignore')
-    except Exception as e:
-        log(f"Warning: Could not load strategy overrides from database: {e}")
-        full_inv['Months_of_Supply'] = 2
+    full_inv['Months_of_Supply'] = 2
         
     lt_df['Vendor Code'] = pd.to_numeric(lt_df['Vendor Code'], errors='coerce').fillna(0).astype(int)
     full_inv['pi_vendor_code'] = pd.to_numeric(full_inv['pi_vendor_code'], errors='coerce').fillna(0).astype(int)
@@ -299,6 +280,7 @@ def run_forecast_logic(inventory_dfs, lead_time_df, status_callback=None):
         'pi_cost': 'Unit Cost',
         'pi_bin_qty': 'On Hand',
         'pi_on_order': 'On Order',
+        'pi_back_ord_qty': 'Back Ordered',
         'Total_Available': 'Total Avail',
         'Lead Time Days': 'Lead Time (Days)',
         'Reorder_Point': 'Reorder Point (ROP)',
@@ -311,7 +293,7 @@ def run_forecast_logic(inventory_dfs, lead_time_df, status_callback=None):
     final_report = to_buy[available_cols].rename(columns=report_cols)
     
     # Rounding for Line Details
-    numeric_fixes = ['On Hand', 'On Order', 'Total Avail', 'Lead Time (Days)', 'Reorder Point (ROP)', 'Suggested Order']
+    numeric_fixes = ['On Hand', 'On Order', 'Back Ordered', 'Total Avail', 'Lead Time (Days)', 'Reorder Point (ROP)', 'Suggested Order']
     for col in numeric_fixes:
         if col in final_report.columns:
             final_report[col] = final_report[col].fillna(0).round(0).astype(int)
